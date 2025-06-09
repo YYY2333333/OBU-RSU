@@ -31,7 +31,9 @@ String webpage = R"rawliteral(
   <title>ESP8266 Config</title>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; }
-    button, input { display: block; margin: 10px auto; font-size: 16px; }
+    button, input { margin: 5px; font-size: 16px; }
+    .mac-inputs { display: flex; justify-content: center; gap: 5px; margin: 10px auto; }
+    .mac-inputs input { width: 30px; text-align: center; }
     .status { margin-top: 20px; }
   </style>
 </head>
@@ -41,7 +43,19 @@ String webpage = R"rawliteral(
   <button onclick="sendCommand('moderate')">Set Moderate MAC</button>
   <button onclick="sendCommand('down')">Set Down MAC</button>
 
-  <input id="mac-input" type="text" placeholder="Enter MAC (e.g. 16:12:34:56:78:9A)" />
+  <div class="mac-inputs">
+    <input id="mac0" maxlength="2" />
+    <span>:</span>
+    <input id="mac1" maxlength="2" />
+    <span>:</span>
+    <input id="mac2" maxlength="2" />
+    <span>:</span>
+    <input id="mac3" maxlength="2" />
+    <span>:</span>
+    <input id="mac4" maxlength="2" />
+    <span>:</span>
+    <input id="mac5" maxlength="2" />
+  </div>
   <button onclick="setCustomMAC()">Set Custom MAC</button>
 
   <input id="power-input" type="number" min="0" max="20.5" step="0.5" placeholder="Set Tx Power (0-20.5 dBm)" />
@@ -57,19 +71,35 @@ String webpage = R"rawliteral(
     function sendCommand(cmd) {
       fetch(`/${cmd}`).then(response => response.json()).then(data => updateStatus(data));
     }
+
     function setTxPower() {
       const power = document.getElementById('power-input').value;
       fetch(`/setTxPower?value=${power}`).then(response => response.json()).then(data => updateStatus(data));
     }
+
     function setCustomMAC() {
-      const mac = document.getElementById('mac-input').value.trim();
-      fetch(`/setCustomMAC?value=${mac}`).then(response => response.json()).then(data => updateStatus(data)).catch(() => alert("Failed to set MAC"));
+      const parts = [];
+      for (let i = 0; i < 6; i++) {
+        const part = document.getElementById('mac' + i).value.trim().toUpperCase();
+        if (!/^[0-9A-F]{2}$/.test(part)) {
+          alert("Invalid MAC format. Use 2-digit hex values.");
+          return;
+        }
+        parts.push(part);
+      }
+      const mac = parts.join(":");
+      fetch(`/setCustomMAC?value=${mac}`)
+        .then(response => response.json())
+        .then(data => updateStatus(data))
+        .catch(() => { console.error("Failed to set MAC"); });
     }
+
     function updateStatus(data) {
       document.getElementById('mac-address').innerText = data.mac;
       document.getElementById('mac-handle').innerText = data.handle;
       document.getElementById('tx-power').innerText = data.txPower;
     }
+
     window.onload = function() {
       fetch('/getCurrentStatus').then(response => response.json()).then(data => updateStatus(data));
     }
@@ -78,7 +108,6 @@ String webpage = R"rawliteral(
 </html>
 )rawliteral";
 
-// 修改 MAC 地址的函数
 bool setMACAddress(const uint8_t mac[]) {
   WiFi.softAPdisconnect(true);
   delay(100);
@@ -86,7 +115,6 @@ bool setMACAddress(const uint8_t mac[]) {
   return wifi_set_macaddr(SOFTAP_IF, (uint8_t*)mac);
 }
 
-// 设置发射功率的函数
 bool setTxPower(float power) {
   if (power < 0 || power > 20.5) return false;
   currentTxPower = power;
@@ -94,7 +122,6 @@ bool setTxPower(float power) {
   return true;
 }
 
-// 更新屏幕显示
 void updateDisplay() {
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_ncenB08_tr);
@@ -123,7 +150,6 @@ void updateDisplay() {
   u8g2.sendBuffer();
 }
 
-// 获取当前状态
 String getCurrentStatus() {
   char macStr[18];
   sprintf(macStr, "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -140,7 +166,6 @@ String getCurrentStatus() {
          "\", \"txPower\": \"" + String(currentTxPower) + "\"}";
 }
 
-// 各种处理函数
 void handleAggressive() {
   if (setMACAddress(aggressiveMAC)) {
     updateDisplay();
@@ -189,7 +214,6 @@ void handleGetCurrentStatus() {
   server.send(200, "application/json", getCurrentStatus());
 }
 
-// 自定义 MAC 地址处理函数
 void handleSetCustomMAC() {
   if (!server.hasArg("value")) {
     server.send(400, "text/plain", "No MAC Value Provided");
@@ -226,7 +250,6 @@ void handleSetCustomMAC() {
   }
 }
 
-// 设置路由
 void setupWebServer() {
   server.on("/", HTTP_GET, []() { server.send(200, "text/html", webpage); });
   server.on("/aggressive", HTTP_GET, handleAggressive);
@@ -239,7 +262,6 @@ void setupWebServer() {
   server.begin();
 }
 
-// 初始化
 void setup() {
   Serial.begin(115200);
   u8g2.begin();
@@ -256,8 +278,6 @@ void setup() {
   setupWebServer();
 }
 
-// 主循环
 void loop() {
   server.handleClient();
 }
-
